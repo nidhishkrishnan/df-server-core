@@ -1,0 +1,132 @@
+/*
+ * Copyright 2018 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.cloud.dataflow.server.config.features;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.AllNestedConditions;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cloud.dataflow.audit.service.AuditRecordService;
+import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.TaskPlatform;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
+import org.springframework.cloud.dataflow.server.config.apps.CommonApplicationProperties;
+import org.springframework.cloud.dataflow.server.repository.TaskDefinitionRepository;
+import org.springframework.cloud.dataflow.server.service.SchedulerService;
+import org.springframework.cloud.dataflow.server.service.SchedulerServiceProperties;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultSchedulerService;
+import org.springframework.cloud.dataflow.server.service.impl.TaskConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.util.StringUtils;
+
+/**
+ * Establishes the {@link SchedulerService} instance to be used by SCDF.
+ *
+ * @author Glenn Renfro
+ * @author Gunnar Hillert
+ * @author David Turanski
+ */
+
+@Configuration
+@Conditional({ SchedulerConfiguration.SchedulerConfigurationPropertyChecker.class })
+@EnableConfigurationProperties({ TaskConfigurationProperties.class, CommonApplicationProperties.class,
+		SchedulerServiceProperties.class })
+public class SchedulerConfiguration {
+
+	private static Logger logger = LoggerFactory.getLogger(SchedulerConfiguration.class);
+
+	@Value("${spring.cloud.dataflow.server.uri:}")
+	private String dataflowServerUri;
+
+	@Bean
+	@ConditionalOnMissingBean
+	public SchedulerService schedulerService(CommonApplicationProperties commonApplicationProperties,
+			List<TaskPlatform> taskPlatforms, TaskDefinitionRepository taskDefinitionRepository,
+			AppRegistryService registry, ResourceLoader resourceLoader,
+			TaskConfigurationProperties taskConfigurationProperties,
+			DataSourceProperties dataSourceProperties,
+			ApplicationConfigurationMetadataResolver metaDataResolver,
+			SchedulerServiceProperties schedulerServiceProperties,
+			AuditRecordService auditRecordService) {
+		return new DefaultSchedulerService(commonApplicationProperties,
+				primaryTaskPlatform(taskPlatforms), taskDefinitionRepository, registry, resourceLoader,
+				taskConfigurationProperties, dataSourceProperties,
+				this.dataflowServerUri, metaDataResolver, schedulerServiceProperties, auditRecordService);
+	}
+
+	private TaskPlatform primaryTaskPlatform(List<TaskPlatform> taskPlatforms) {
+
+		List<TaskPlatform> candidatePlatforms = new ArrayList<>();
+
+		for (TaskPlatform taskPlatform : taskPlatforms) {
+			if (taskPlatform.isPrimary()) {
+				if (taskPlatform.getLaunchers().size() == 0) {
+					logger.warn("TaskPlatform {} is selected as primary but has no TaskLaunchers configured",
+						taskPlatform.getName());
+				} else {
+					logger.debug("TaskPlatform {} is selected as primary", taskPlatform.getName());
+					candidatePlatforms.add(taskPlatform);
+				}
+			}
+		}
+
+		if (candidatePlatforms.size() > 1) {
+			String[] platformNames = new String[candidatePlatforms.size()];
+			int i = 0;
+			for (TaskPlatform taskPlatform: candidatePlatforms) {
+				platformNames[i++] = taskPlatform.getName();
+			}
+			throw new IllegalStateException(
+				String.format("Expecting 1 primary TaskPlatform., got %d: %s)",
+					candidatePlatforms.size(), StringUtils.arrayToCommaDelimitedString(platformNames)));
+		}
+
+		if (candidatePlatforms.size() == 0) {
+			throw new IllegalStateException("No valid primary TaskPlatform configured");
+		}
+
+		return candidatePlatforms.get(0);
+	}
+
+	public static class SchedulerConfigurationPropertyChecker extends AllNestedConditions {
+
+		public SchedulerConfigurationPropertyChecker() {
+			super(ConfigurationPhase.REGISTER_BEAN);
+		}
+
+		@ConditionalOnProperty(prefix = FeaturesProperties.FEATURES_PREFIX, name = FeaturesProperties.SCHEDULES_ENABLED)
+		static class TestSchedulerProperty {
+		}
+
+		@ConditionalOnProperty(prefix = FeaturesProperties.FEATURES_PREFIX, name = FeaturesProperties.TASKS_ENABLED, matchIfMissing = true)
+		static class TestTaskProperty {
+		}
+
+	}
+
+}
