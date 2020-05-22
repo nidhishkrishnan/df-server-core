@@ -164,6 +164,15 @@ public interface JobService {
 	Collection<String> listJobs(int start, int count);
 
 	/**
+	 * Query the job names in the system, either launchable or not. If not
+	 * launchable, then there must be a history of the job having been launched
+	 * previously in the {@link JobRepository}.
+	 * @return a collection of job names
+	 */
+	Collection<String> listJobs();
+
+
+	/**
 	 * Count the total number of jobs that can be returned by
 	 * {@link #listJobs(int, int)}.
 	 * 
@@ -183,7 +192,7 @@ public interface JobService {
 	/**
 	 * List the {@link JobInstance job instances} in descending order of
 	 * creation (usually close to order of execution).
-	 * 
+	 *
 	 * @param jobName the name of the job
 	 * @param start the index of the first to return
 	 * @param count the maximum number of instances to return
@@ -191,6 +200,7 @@ public interface JobService {
 	 * @throws NoSuchJobException thrown if job specified does not exist
 	 */
 	Collection<JobInstance> listJobInstances(String jobName, int start, int count) throws NoSuchJobException;
+
 
 	/**
 	 * Count the number of {@link JobInstance job instances} in the repository
@@ -227,6 +237,18 @@ public interface JobService {
 	Collection<JobExecutionWithStepCount> listJobExecutionsForJobWithStepCount(String jobName, int start, int count) throws NoSuchJobException;
 
 	/**
+	 * List the {@link JobExecutionWithStepCount job executions} for a job in descending
+	 * order of creation (usually close to execution order).
+	 *
+	 * @param jobName the job name
+	 * @param start the start index of the first job execution
+	 * @param count the maximum number of executions to return
+	 * @return a collection of {@link JobExecutionWithStepCount}
+	 * @throws NoSuchJobException thrown if job specified does not exist
+	 */
+	Collection<JobExecutionWithStepCount> listJobExecutionsForJobWithStepCount(String jobName, String jobStatus, int start, int count) throws NoSuchJobException;
+
+	/**
 	 * Count the job executions in the repository for a job.
 	 * 
 	 * @param jobName the job name
@@ -235,6 +257,24 @@ public interface JobService {
 	 */
 	int countJobExecutionsForJob(String jobName) throws NoSuchJobException;
 
+	/**
+	 * Retrieves the total number {@link JobExecution} that match a specific job name.
+	 *
+	 * @param jobState the job state to findByTaskNameContains.
+	 * @return the number of {@link JobExecution}s that match the job name.
+	 * @throws NoSuchJobException if the job for the jobName does not exist.
+	 */
+	int countJobExecutionsForState(String jobState) throws NoSuchJobException;
+
+	/**
+	 * Retrieves the total number {@link JobExecution} that match a specific job name.
+	 *
+	 * @param jobName the job name to findByTaskNameContains.
+	 * @param jobState the job state to findByTaskNameContains.
+	 * @return the number of {@link JobExecution}s that match the job name.
+	 * @throws NoSuchJobException if the job for the jobName does not exist.
+	 */
+	int countJobExecutionsForJobNameAndState(String jobName, String jobState) throws NoSuchJobException;
 	/**
 	 * Get all the job executions for a given job instance. On a sunny day there
 	 * would be only one. If there have been failures and restarts there may be

@@ -3,6 +3,8 @@
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>spring-cloud-dataflow-server-core</artifactId>
 	<packaging>jar</packaging>
+	<version>2.1.0.1-SNAPSHOT</version>
+	<name>spring-cloud-dataflow-server-core</name>
 	<parent>
 		<groupId>org.springframework.cloud</groupId>
 		<artifactId>spring-cloud-dataflow-parent</artifactId>
@@ -200,5 +202,24 @@
 				</includes>
 			</resource>
 		</resources>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-checkstyle-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>checkstyle-validation</id>
+						<phase>none</phase>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
 	</build>
+
+	<distributionManagement>
+		<repository>
+			<id>nexus-site</id>
+			<url>https://nexus.affinitas.de/content/repositories/snapshots/de/affinitas/</url>
+		</repository>
+	</distributionManagement>
 </project>

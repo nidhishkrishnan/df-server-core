@@ -15,7 +15,10 @@
  */
 package org.springframework.cloud.dataflow.server.batch;
 
+import org.springframework.batch.core.JobInstance;
 import org.springframework.batch.core.repository.dao.JobInstanceDao;
+
+import java.util.Collection;
 
 /**
  * @author Dave Syer
@@ -28,5 +31,8 @@ public interface SearchableJobInstanceDao extends JobInstanceDao {
 	 * @return the number of instances
 	 */
 	int countJobInstances(String name);
+
+
+	Collection<JobInstance> getJobInstances(String jobName, String jobState, int start, int count);
 
 }

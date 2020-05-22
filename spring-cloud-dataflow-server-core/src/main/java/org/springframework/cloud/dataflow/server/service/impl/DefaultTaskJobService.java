@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -110,11 +111,8 @@ public class DefaultTaskJobService implements TaskJobService {
 	}
 
 	@Override
-	public List<TaskJobExecution> listJobExecutionsWithStepCount(Pageable pageable) throws NoSuchJobExecutionException {
-		Assert.notNull(pageable, "pageable must not be null");
-		List<JobExecutionWithStepCount> jobExecutions = new ArrayList<>(
-				jobService.listJobExecutionsWithStepCount(getPageOffset(pageable), pageable.getPageSize()));
-		return getTaskJobExecutionsWithStepCountForList(jobExecutions);
+	public Collection<String> listJobs() {
+		return jobService.listJobs();
 	}
 
 	@Override
@@ -134,22 +132,16 @@ public class DefaultTaskJobService implements TaskJobService {
 	}
 
 	@Override
-	public TaskJobExecution getJobExecution(long id) throws NoSuchJobExecutionException {
-		JobExecution jobExecution = jobService.getJobExecution(id);
-		return getTaskJobExecution(jobExecution);
+	public List<TaskJobExecution> listJobExecutionsForJobWithStepCount(Pageable pageable, String jobName, String jobState) throws NoSuchJobException {
+		Assert.notNull(pageable, "pageable must not be null");
+		return getTaskJobExecutionsWithStepCountForList(
+				jobService.listJobExecutionsForJobWithStepCount(jobName, jobState, getPageOffset(pageable), pageable.getPageSize()));
 	}
 
 	@Override
-	public List<JobInstanceExecutions> listTaskJobInstancesForJobName(Pageable pageable, String jobName)
-			throws NoSuchJobException {
-		Assert.notNull(pageable, "pageable must not be null");
-		Assert.notNull(jobName, "jobName must not be null");
-		List<JobInstanceExecutions> taskJobInstances = new ArrayList<>();
-		for (JobInstance jobInstance : jobService.listJobInstances(jobName, getPageOffset(pageable),
-				pageable.getPageSize())) {
-			taskJobInstances.add(getJobInstanceExecution(jobInstance));
-		}
-		return taskJobInstances;
+	public TaskJobExecution getJobExecution(long id) throws NoSuchJobExecutionException {
+		JobExecution jobExecution = jobService.getJobExecution(id);
+		return getTaskJobExecution(jobExecution);
 	}
 
 	@Override
@@ -172,6 +164,19 @@ public class DefaultTaskJobService implements TaskJobService {
 	public int countJobExecutionsForJob(String jobName) throws NoSuchJobException {
 		Assert.notNull(jobName, "jobName must not be null");
 		return jobService.countJobExecutionsForJob(jobName);
+	}
+
+	@Override
+	public int countJobExecutionsForJobNameAndState(String jobName, String jobState) throws NoSuchJobException {
+		if(StringUtils.isNotBlank(jobName) && StringUtils.isNotBlank(jobState)) {
+			return jobService.countJobExecutionsForJobNameAndState(jobName, jobState);
+		} else if(StringUtils.isNotBlank(jobName) && StringUtils.isBlank(jobState)) {
+			return jobService.countJobExecutionsForJob(jobName);
+		} else if(StringUtils.isBlank(jobName) && StringUtils.isNotBlank(jobState)) {
+			return jobService.countJobExecutionsForState(jobState);
+		} else {
+			return jobService.countJobExecutions();
+		}
 	}
 
 	@Override

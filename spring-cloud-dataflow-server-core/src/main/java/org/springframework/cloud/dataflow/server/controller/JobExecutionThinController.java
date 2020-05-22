@@ -19,14 +19,18 @@ package org.springframework.cloud.dataflow.server.controller;
 import java.util.List;
 import java.util.TimeZone;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobInstance;
 import org.springframework.batch.core.launch.NoSuchJobException;
 import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cloud.dataflow.rest.job.JobInstanceExecutions;
 import org.springframework.cloud.dataflow.rest.job.TaskJobExecution;
 import org.springframework.cloud.dataflow.rest.job.support.TimeUtils;
 import org.springframework.cloud.dataflow.rest.resource.JobExecutionThinResource;
+import org.springframework.cloud.dataflow.rest.resource.JobInstanceResource;
 import org.springframework.cloud.dataflow.server.batch.JobService;
 import org.springframework.cloud.dataflow.server.service.TaskJobService;
 import org.springframework.data.domain.Page;
@@ -84,14 +88,14 @@ public class JobExecutionThinController {
 	 * @throws NoSuchJobExecutionException in the event that a job execution id specified
 	 * is not present when looking up stepExecutions for the result.
 	 */
-	@RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
-	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<JobExecutionThinResource> listJobsOnly(Pageable pageable,
-			PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobExecutionException {
-		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutionsWithStepCount(pageable);
-		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable, taskJobService.countJobExecutions());
-		return assembler.toResource(page, jobAssembler);
-	}
+//	@RequestMapping(value = "", method = RequestMethod.GET,  params = {"page", "size"}, produces = "application/json")
+//	@ResponseStatus(HttpStatus.OK)
+//	public PagedResources<JobExecutionThinResource> listJobsOnly(Pageable pageable,
+//			PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobExecutionException {
+//		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutionsWithStepCount(pageable);
+//		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable, taskJobService.countJobExecutions());
+//		return assembler.toResource(page, jobAssembler);
+//	}
 	/**
 	 * Retrieve all task job executions with the task name specified
 	 *
@@ -101,17 +105,32 @@ public class JobExecutionThinController {
 	 * @return list task/job executions with the specified jobName.
 	 * @throws NoSuchJobException if the job with the given name does not exist.
 	 */
-	@RequestMapping(value = "", method = RequestMethod.GET, params = "name", produces = "application/json")
+//	@RequestMapping(value = "", method = RequestMethod.GET, params = "name", produces = "application/json")
+//	@ResponseStatus(HttpStatus.OK)
+//	public PagedResources<JobExecutionThinResource> retrieveJobsByName(@RequestParam("name") String jobName,
+//			Pageable pageable, PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobException {
+//		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutionsForJobWithStepCount(pageable, jobName);
+//		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable,
+//				taskJobService.countJobExecutionsForJob(jobName));
+//		return assembler.toResource(page, jobAssembler);
+//	}
+
+	/**
+	 * Return a page-able list of {@link JobInstanceResource} defined jobs.
+	 *
+	 * @param jobName the name of the job
+	 * @param pageable page-able collection of {@link JobInstance}s.
+	 * @param assembler for the {@link JobInstance}s
+	 * @return a list of Job Instance
+	 * @throws NoSuchJobException if the job for jobName specified does not exist.
+	 */
+	@RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<JobExecutionThinResource> retrieveJobsByName(@RequestParam("name") String jobName,
-			Pageable pageable, PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobException {
-		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutionsForJobWithStepCount(pageable, jobName);
-		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable,
-				taskJobService.countJobExecutionsForJob(jobName));
+	public PagedResources<JobExecutionThinResource> list(@RequestParam(name = "name", required = false) String jobName, @RequestParam(name = "state", required = false) String jobState, Pageable pageable, PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobException {
+		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutionsForJobWithStepCount(pageable, jobName, jobState);
+		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable, taskJobService.countJobExecutionsForJobNameAndState(jobName, jobState));
 		return assembler.toResource(page, jobAssembler);
 	}
-
-
 
 	/**
 	 * {@link org.springframework.hateoas.ResourceAssembler} implementation that converts

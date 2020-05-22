@@ -17,14 +17,11 @@ package org.springframework.cloud.dataflow.server.batch;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import javax.sql.DataSource;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.JobExecution;
@@ -52,6 +49,12 @@ public class JdbcSearchableJobExecutionDao extends JdbcJobExecutionDao implement
 
 	private static final String GET_COUNT_BY_JOB_NAME = "SELECT COUNT(1) from %PREFIX%JOB_EXECUTION E, %PREFIX%JOB_INSTANCE I "
 			+ "where E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and I.JOB_NAME=?";
+
+	private static final String GET_COUNT_BY_STATUS = "SELECT COUNT(1) from %PREFIX%JOB_EXECUTION E, %PREFIX%JOB_INSTANCE I "
+			+ "where E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and E.STATUS=?";
+
+	private static final String GET_COUNT_BY_JOB_NAME_AND_STATUS = "SELECT COUNT(1) from %PREFIX%JOB_EXECUTION E, %PREFIX%JOB_INSTANCE I "
+			+ "where E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and I.JOB_NAME=? and E.STATUS=?";
 
 	private static final String FIELDS = "E.JOB_EXECUTION_ID, E.START_TIME, E.END_TIME, E.STATUS, E.EXIT_CODE, E.EXIT_MESSAGE, "
 			+ "E.CREATE_TIME, E.LAST_UPDATED, E.VERSION, I.JOB_INSTANCE_ID, I.JOB_NAME";
@@ -175,6 +178,16 @@ public class JdbcSearchableJobExecutionDao extends JdbcJobExecutionDao implement
 		return getJdbcTemplate().queryForObject(getQuery(GET_COUNT_BY_JOB_NAME), Integer.class, jobName);
 	}
 
+	@Override
+	public int countJobExecutionsByState(String jobState) {
+		return getJdbcTemplate().queryForObject(getQuery(GET_COUNT_BY_JOB_NAME), Integer.class, jobState);
+	}
+
+	@Override
+	public int countJobExecutions(String jobName, String jobState) {
+		return getJdbcTemplate().queryForObject(getQuery(GET_COUNT_BY_JOB_NAME_AND_STATUS), Integer.class, jobName, jobState);
+	}
+
 	/**
 	 * @see SearchableJobExecutionDao#getRunningJobExecutions()
 	 */
@@ -209,14 +222,95 @@ public class JdbcSearchableJobExecutionDao extends JdbcJobExecutionDao implement
 	@Override
 	public List<JobExecutionWithStepCount> getJobExecutionsWithStepCount(String jobName, int start, int count) {
 		if (start <= 0) {
+			//SELECT TOP 30 E.JOB_EXECUTION_ID, E.START_TIME, E.END_TIME, E.STATUS, E.EXIT_CODE, E.EXIT_MESSAGE, E.CREATE_TIME, E.LAST_UPDATED, E.VERSION, I.JOB_INSTANCE_ID, I.JOB_NAME, (SELECT COUNT(*) FROM BATCH_STEP_EXECUTION S WHERE S.JOB_EXECUTION_ID = E.JOB_EXECUTION_ID) as STEP_COUNT FROM BATCH_JOB_EXECUTION E, BATCH_JOB_INSTANCE I WHERE E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and I.JOB_NAME=? ORDER BY JOB_EXECUTION_ID DESC
 			return getJdbcTemplate().query(byJobNameWithStepCountPagingQueryProvider.generateFirstPageQuery(count),
 					new JobExecutionStepCountRowMapper(), jobName);
 		}
 		try {
+			//SELECT LIMIT 1799 1 JOB_EXECUTION_ID FROM BATCH_JOB_EXECUTION E, BATCH_JOB_INSTANCE I WHERE E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and I.JOB_NAME=? ORDER BY JOB_EXECUTION_ID DESC
 			Long startAfterValue = getJdbcTemplate().queryForObject(
 					byJobNameWithStepCountPagingQueryProvider.generateJumpToItemQuery(start, count), Long.class, jobName);
+
+			//SELECT TOP 60 E.JOB_EXECUTION_ID, E.START_TIME, E.END_TIME, E.STATUS, E.EXIT_CODE, E.EXIT_MESSAGE, E.CREATE_TIME, E.LAST_UPDATED, E.VERSION, I.JOB_INSTANCE_ID, I.JOB_NAME, (SELECT COUNT(*) FROM BATCH_STEP_EXECUTION S WHERE S.JOB_EXECUTION_ID = E.JOB_EXECUTION_ID) as STEP_COUNT FROM BATCH_JOB_EXECUTION E, BATCH_JOB_INSTANCE I WHERE (E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and I.JOB_NAME=?) AND ((JOB_EXECUTION_ID < ?)) ORDER BY JOB_EXECUTION_ID DESC
 			return getJdbcTemplate().query(byJobNameWithStepCountPagingQueryProvider.generateRemainingPagesQuery(count),
 					new JobExecutionStepCountRowMapper(), jobName, startAfterValue);
+		}
+		catch (IncorrectResultSizeDataAccessException e) {
+			return Collections.emptyList();
+		}
+	}
+
+	@Override
+	public List<JobExecutionWithStepCount> getJobExecutionsWithStepCount(String jobName, String jobState, int start, int count) {
+		if (start <= 0) {
+			StringBuilder queryBuilder = new StringBuilder();
+			List params = new ArrayList();
+
+			queryBuilder.append("SELECT TOP "+count+" E.JOB_EXECUTION_ID, E.START_TIME, E.END_TIME, E.STATUS, E.EXIT_CODE, E.EXIT_MESSAGE, E.CREATE_TIME, E.LAST_UPDATED, E.VERSION, I.JOB_INSTANCE_ID, I.JOB_NAME, (SELECT COUNT(*) FROM BATCH_STEP_EXECUTION S WHERE S.JOB_EXECUTION_ID = E.JOB_EXECUTION_ID) as STEP_COUNT FROM BATCH_JOB_EXECUTION E, BATCH_JOB_INSTANCE I WHERE E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID ");
+			if (StringUtils.isNotBlank(jobName)) {
+				queryBuilder.append("AND I.JOB_NAME = ? ");
+				params.add(jobName);
+			}
+			if (StringUtils.isNotBlank(jobState)) {
+				queryBuilder.append("AND E.STATUS = ? ");
+				params.add(jobState);
+			}
+
+			queryBuilder.append("ORDER BY JOB_EXECUTION_ID DESC");
+
+			return getJdbcTemplate().query(queryBuilder.toString(), params.toArray(),
+					new JobExecutionStepCountRowMapper());
+		}
+		try {
+
+			List queryAfterParams = new ArrayList();
+			StringBuilder queryAfterBuilder = new StringBuilder();
+			int page = start / count;
+			int offset = page * count - 1;
+			offset = offset < 0 ? 0 : offset;
+			String topClause = "LIMIT " + offset + " 1";
+
+			queryAfterBuilder.append("SELECT "+topClause+" JOB_EXECUTION_ID FROM BATCH_JOB_EXECUTION E, BATCH_JOB_INSTANCE I WHERE E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID ");
+			if (StringUtils.isNotBlank(jobName)) {
+				queryAfterBuilder.append("AND I.JOB_NAME = ? ");
+				queryAfterParams.add(jobName);
+			}
+			if (StringUtils.isNotBlank(jobState)) {
+				queryAfterBuilder.append("AND E.STATUS = ? ");
+				queryAfterParams.add(jobState);
+			}
+			queryAfterBuilder.append("ORDER BY JOB_EXECUTION_ID DESC");
+
+
+			Long startAfterValue = getJdbcTemplate().queryForObject(
+					queryAfterBuilder.toString(), queryAfterParams.toArray(), Long.class);
+
+
+
+
+			List pagingQueryParams = new ArrayList();
+			StringBuilder pagingQueryBuilder = new StringBuilder();
+
+			pagingQueryBuilder.append("SELECT TOP "+count+" E.JOB_EXECUTION_ID, E.START_TIME, E.END_TIME, E.STATUS, E.EXIT_CODE, E.EXIT_MESSAGE, E.CREATE_TIME, E.LAST_UPDATED, E.VERSION, I.JOB_INSTANCE_ID, I.JOB_NAME, (SELECT COUNT(*) FROM BATCH_STEP_EXECUTION S WHERE S.JOB_EXECUTION_ID = E.JOB_EXECUTION_ID) as STEP_COUNT FROM BATCH_JOB_EXECUTION E, BATCH_JOB_INSTANCE I WHERE TRUE ");
+			if (StringUtils.isNotBlank(jobName)) {
+				pagingQueryBuilder.append("AND (E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID and I.JOB_NAME=?) AND ((JOB_EXECUTION_ID < ?)) ");
+				pagingQueryParams.add(jobName);
+				pagingQueryParams.add(startAfterValue);
+			} else {
+				pagingQueryBuilder.append("AND (E.JOB_INSTANCE_ID=I.JOB_INSTANCE_ID) AND ((JOB_EXECUTION_ID < ?)) ");
+				pagingQueryParams.add(startAfterValue);
+			}
+
+			if (StringUtils.isNotBlank(jobState)) {
+				pagingQueryBuilder.append("AND E.STATUS = ? ");
+				pagingQueryParams.add(jobState);
+			}
+			pagingQueryBuilder.append("ORDER BY JOB_EXECUTION_ID DESC");
+
+
+			//
+			return getJdbcTemplate().query(pagingQueryBuilder.toString(), pagingQueryParams.toArray(),
+					new JobExecutionStepCountRowMapper());
 		}
 		catch (IncorrectResultSizeDataAccessException e) {
 			return Collections.emptyList();

@@ -17,6 +17,7 @@
 package org.springframework.cloud.dataflow.server.controller;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
@@ -77,22 +78,16 @@ public class JobInstanceController {
 	}
 
 	/**
-	 * Return a page-able list of {@link JobInstanceResource} defined jobs.
+	 * Return list of {@link String} of job names.
 	 *
-	 * @param jobName the name of the job
-	 * @param pageable page-able collection of {@link JobInstance}s.
-	 * @param assembler for the {@link JobInstance}s
-	 * @return a list of Job Instance
-	 * @throws NoSuchJobException if the job for jobName specified does not exist.
+	 * @return the {@link Collection}
+	 * @throws NoSuchJobInstanceException if job instance for the id does not exist.
+	 * @throws NoSuchJobException if the job for the job instance does not exist.
 	 */
-	@RequestMapping(value = "", method = RequestMethod.GET, params = "name")
+	@RequestMapping(value = "/names", method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<JobInstanceResource> list(@RequestParam("name") String jobName, Pageable pageable,
-			PagedResourcesAssembler<JobInstanceExecutions> assembler) throws NoSuchJobException {
-		List<JobInstanceExecutions> jobInstances = taskJobService.listTaskJobInstancesForJobName(pageable, jobName);
-		Page<JobInstanceExecutions> page = new PageImpl<>(jobInstances, pageable,
-				taskJobService.countJobInstances(jobName));
-		return assembler.toResource(page, jobAssembler);
+	public Collection<String> list() {
+		return taskJobService.listJobs();
 	}
 
 	/**
@@ -109,6 +104,7 @@ public class JobInstanceController {
 		JobInstanceExecutions jobInstance = taskJobService.getJobInstance(id);
 		return jobAssembler.toResource(jobInstance);
 	}
+
 
 	/**
 	 * {@link org.springframework.hateoas.ResourceAssembler} implementation that converts
