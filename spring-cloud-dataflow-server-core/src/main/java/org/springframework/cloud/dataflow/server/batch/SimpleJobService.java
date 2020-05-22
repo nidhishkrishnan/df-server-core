@@ -555,12 +555,6 @@ public class SimpleJobService implements JobService, DisposableBean {
     }
 
     @Override
-    public Collection<JobInstance> listJobInstances(String jobName, String jobState, int start, int count) throws NoSuchJobException {
-        checkJobExists(jobName);
-        return jobInstanceDao.getJobInstances(jobName, jobState, start, count);
-    }
-
-    @Override
     public Collection<JobInstance> listJobInstances(String jobName, int start, int count) throws NoSuchJobException {
         checkJobExists(jobName);
         return jobInstanceDao.getJobInstances(jobName, start, count);
